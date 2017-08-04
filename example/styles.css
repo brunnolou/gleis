@@ -1,0 +1,29 @@
+ body {
+	margin: 30px;
+	margin-left: 500px;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+.mask {
+	overflow: hidden;
+}
+
+.box {
+	background: #eee;
+	border: 1px solid #ddd;
+	width: 100px;
+	height: 100px;
+}
+
+.track {
+	display: flex;
+	background: rgba(0,0,0, .1);
+	border: 1px solid #ddd;
+	margin-bottom: 80px;
+}
+.group {
+	display: flex;
+}

@@ -1,0 +1,46 @@
+{
+  "name": "gleis",
+  "version": "0.0.1",
+  "description": "Gleis – physics for dragging UI animation",
+  "main": "lib/index.js",
+  "scripts": {
+    "start": "neutrino start",
+    "build": "babel src | uglifyjs -b -o lib/index.js && uglifyjs lib/index.js -m -c -o lib/index.min.js",
+    "test": "jest"
+  },
+  "keywords": [
+    "drag",
+    "ui",
+    "spring",
+    "animation",
+    "physics"
+  ],
+  "author": "Bruno Lourenco",
+  "license": "MIT",
+  "dependencies": {
+    "popmotion": "^7.5.6",
+    "raf": "^3.3.2",
+    "springs": "^1.0.2"
+  },
+  "devDependencies": {
+    "babel-cli": "^6.24.1",
+    "babel-eslint": "^7.2.3",
+    "babel-preset-env": "^1.6.0",
+    "eslint": "^3.19.0",
+    "eslint-config-airbnb-base": "^11.2.0",
+    "eslint-plugin-import": "^2.7.0",
+    "eslint-plugin-jest": "^20.0.3",
+    "jest": "^20.0.4",
+    "neutrino": "^6.1.5",
+    "neutrino-preset-web": "^6.1.5",
+    "uglifyjs": "^2.4.11"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brunnolou/gleis.git"
+  },
+  "bugs": {
+    "url": "https://github.com/brunnolou/gleis/issues"
+  },
+  "homepage": "https://github.com/brunnolou/gleis#readme"
+}
