@@ -1,71 +1,179 @@
-import { transform, css, pointer, trackOffset } from 'popmotion';
-import raf from 'raf';
-import springs from 'springs';
+import { css, pointer, value, physics, calc, transform } from 'popmotion';
 
-const { snap } = transform;
+const { pipe, conditional, nonlinearSpring, add, subtract, snap } = transform;
+const { getProgressFromValue } = calc;
 
-const tension = 240;
-const friction = 20;
-
-const dragTension = 1000;
-const dragFriction = 30;
-
-/**
- * `Gleis`
- *
- * e.g.
- * options = {
- *  bounds: [0, 400],
- *  snap: int 100 | array [200, 250],
- * }
- */
-
+// Create renderers
 export default class Gleis {
   constructor({
-    draggedElement,
-    wagonElements,
-    trackElement,
-    bounds: [boundStart, boundEnd],
-    sleepersAt,
+    events = { onUpdate: null, onSnap: null },
+    snapSettings = { scrollFriction: 0.4, friction: 0.8, spring: 200 },
+    snapToBounds = true,
+    sleepers = [],
     reversed = false,
-    horizontal = true,
+    track,
+    train,
+    bounds,
   }) {
-    this.horizontal = horizontal;
-    this.horizontal = horizontal;
-    this.draggedElement = draggedElement;
+    // DOM elements.
+    this.track = track;
+    this.train = train;
+
+    this.currentAction = null;
+    this.events = events;
+    this.sleepers = sleepers;
+    this.snapSettings = snapSettings;
+    this.snapToBounds = snapToBounds;
     this.reversed = reversed;
-    this.start = boundStart || 0;
-    this.end = boundEnd || this.getElementSize([trackElement])[0];
-    this.sleepers = sleepersAt || this.getElementSize(wagonElements);
 
-    this.sleepers = this.setSleepers(this.sleepers);
-
-    this.snap = snap(this.sleepers);
-
-    this.mousedownX = 0;
-    this.dragStartPositionX = 0;
-    this.positionX = 0;
-
-    this.position = 0;
-
-    this.isDragging = false;
-    this.dragPositionX = this.positionX;
-    this.restX = this.positionX;
-    this.velocityX = 0;
-
-    // Bind mouse down to track element.
-    this.draggedCss = css(draggedElement);
-
-    trackElement.addEventListener('mousedown', this.onMousedown.bind(this));
-    trackElement.addEventListener('touchstart', this.onMousedown.bind(this));
-
-    this.loop();
-
-    this.spring = springs(tension, friction, {
-      onInit: (Spring) => {
-        this.Spring = Spring;
-      },
+    this.trainCSS = css(this.train);
+    this.setOffset = x => this.currentOffset.set(x);
+    this.getOffset = x => this.currentOffset.get(x);
+    this.currentOffset = value(0, (x) => {
+      if (typeof x !== 'number') return;
+      this.onUpdate(x);
+      this.trainCSS.set('x', x);
     });
+
+    this.bounds = bounds || this.calcBounds();
+
+    this.BOUNDS_ELASTICITY = 4;
+
+    this.isOffLeft = x => x >= this.bounds[0];
+    this.isOffRight = x => x <= this.bounds[1];
+
+    this.track.addEventListener('mousedown', this.startDragging.bind(this), false);
+    this.track.addEventListener('touchstart', this.startDragging.bind(this), false);
+    window.addEventListener('mouseup', this.startScrolling.bind(this), false);
+    window.addEventListener('touchend', this.startScrolling.bind(this), false);
+
+    // window.addEventListener('resize', this.calcBounds.bind(this));
+  }
+
+  onUpdate(x) {
+    this.progress = getProgressFromValue(...[...this.bounds, x]);
+
+    if (!this.events.onUpdate) return x;
+
+    // set progress between 0 and 1;
+    this.events.onUpdate(this.progress, this);
+
+    return x;
+  }
+
+  calcBounds() {
+    if (this.reversed) {
+      this.bounds = [0, this.track.clientWidth - this.train.clientWidth];
+    } else {
+      this.bounds = [0, this.track.clientWidth];
+    }
+    console.log('this.bounds: ', this.bounds);
+
+    return this.bounds;
+  }
+
+  // Prevent two competing actions.
+  startAction(action) {
+    if (this.currentAction) this.currentAction.stop();
+
+    this.currentAction = action.start();
+  }
+
+  startDragging(e) {
+    e.preventDefault();
+
+    this.startAction(pointer(e));
+    const pointerX = this.currentAction.x.get();
+    this.currentAction.setProps({
+      onUpdate: pipe(
+        // Select the `x` pointer value
+        ({ x }) => x,
+        // Subtract the pointer origin to get the pointer offset
+        subtract(pointerX),
+        // Apply the offset to the slider's origin offset
+        add(this.getOffset()),
+        // Apply a spring if the slider is out of bounds
+        conditional(
+          v => v > this.bounds[0],
+          nonlinearSpring(this.BOUNDS_ELASTICITY, this.bounds[0]),
+        ),
+        conditional(
+          v => v < this.bounds[1],
+          nonlinearSpring(this.BOUNDS_ELASTICITY, this.bounds[1]),
+        ),
+        // Use the calculated value to set the offset
+
+        this.setOffset,
+      ),
+    });
+  }
+
+  startScrolling(e) {
+    e.preventDefault();
+
+    const { scrollFriction, friction, spring } = this.snapSettings;
+
+    const offset = this.getOffset();
+    const snapTo = (x) => {
+      if (!this.snapToBounds) {
+        if (this.isOffLeft(x)) return this.bounds[0];
+        if (this.isOffRight(x)) return this.bounds[1];
+
+        return x;
+      }
+
+      const bounds = this.snapToBounds ? this.bounds : [];
+      const snapPoints = [...bounds, ...this.sleepers].sort((a, b) => a > b);
+
+      const point = snap(snapPoints)(x);
+
+      if (this.events.onSnap) this.events.onSnap(point);
+
+      return point;
+    };
+
+    // If out of bounds, snap to the edges.
+    if (this.isOffLeft(offset) || this.isOffRight(offset)) {
+      this.startAction(
+        physics({
+          from: this.getOffset(),
+          to: snapTo(this.getOffset()),
+          spring,
+          friction,
+          velocity: this.currentOffset.getVelocity(),
+          onUpdate: pipe(this.setOffset),
+        }),
+      );
+    } else {
+      // Otherwise scroll with low friction.
+      this.startAction(
+        physics({
+          from: this.getOffset(),
+          friction: scrollFriction,
+          velocity: this.currentOffset.getVelocity(),
+          onUpdate: pipe(
+            conditional(
+              x =>
+                this.isOffLeft(x) ||
+                this.isOffRight(x) ||
+                Math.abs(this.currentOffset.getVelocity()) < 200,
+              x =>
+                this.startAction(
+                  physics({
+                    from: this.getOffset(),
+                    to: snapTo(x),
+                    spring,
+                    friction,
+                    velocity: this.currentOffset.getVelocity(),
+                    onUpdate: pipe(this.setOffset),
+                  }),
+                ),
+            ),
+            this.setOffset,
+          ),
+        }),
+      );
+    }
   }
 
   setSleepers(sleepers) {
@@ -80,63 +188,10 @@ export default class Gleis {
     return result;
   }
 
-  onMousedown(e) {
-    this.pointerTracker = pointer(e).start();
-    this.xOffset = trackOffset(this.pointerTracker.x, {
-      from: this.draggedCss.get('x'),
-      onUpdate: (x) => {
-        this.position = x;
-      },
-    }).start();
-
-    this.Spring.setSpringConfig({ tension: dragTension, friction: dragFriction });
-
-    window.addEventListener('mouseup', this.onMouseup.bind(this));
-    window.addEventListener('touchend', this.onMouseup.bind(this));
-  }
-
-  onMouseup() {
-    const mouseVelocity = this.pointerTracker.getVelocity().x / 20;
-
-    if (this.pointerTracker) this.pointerTracker.stop();
-    if (this.xOffset) this.xOffset.stop();
-
-    this.Spring.setSpringConfig({ tension, friction });
-    this.Spring.setVelocity(mouseVelocity);
-
-    this.position = this.position + mouseVelocity;
-    this.position = this.snap(this.position);
-
-    window.removeEventListener('touchend', this.onMouseup.bind(this));
-    window.removeEventListener('mouseup', this.onMouseup.bind(this));
-  }
-
-  applyForce(force) {
-    this.velocityX += force;
-  }
-
   getElementSize(elements = []) {
     const size = this.horizontal ? 'width' : 'height';
 
     return [...elements].map(element => element.getBoundingClientRect()[size]);
-  }
-
-  update() {
-    const axis = this.horizontal ? 'x' : 'y';
-
-    // Add css to element.
-    this.draggedCss.set({
-      [axis]: this.spring(this.position),
-    });
-  }
-
-  loop() {
-    const self = this;
-
-    raf(function tick() {
-      self.update();
-      raf(tick);
-    });
   }
 
   /**
@@ -149,12 +204,13 @@ export default class Gleis {
     const end = document.createElement('div');
     const height = 80;
     const padding = 20;
+    const width = this.bounds[this.bounds.length - 1] * -1;
 
     container.style = `
       position: fixed;
       bottom: 40px;
       right: 40px;
-      width: ${this.end}px;
+      width: ${width}px;
       height: ${height - padding * 2}px;
       background: rgba(0,0,0, .1);
     `;
@@ -167,9 +223,9 @@ export default class Gleis {
     `;
     start.style = boundsStyle;
     end.style = boundsStyle;
-    end.style.left = `${this.end}px`;
+    end.style.left = `${width}px`;
 
-    this.sleepers.forEach((position) => {
+    this.bounds.forEach((position) => {
       const dotted = document.createElement('div');
 
       dotted.style = `

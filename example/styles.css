@@ -1,10 +1,15 @@
  body {
 	margin: 30px;
-	margin-left: 500px;
+	--size: 200px;
+	--border: 4px;
 }
 
 * {
 	box-sizing: border-box;
+}
+
+#root {
+	overflow: hidden;
 }
 
 .mask {
@@ -12,18 +17,52 @@
 }
 
 .box {
+	text-align: center;
 	background: #eee;
 	border: 1px solid #ddd;
-	width: 100px;
-	height: 100px;
+	width: var(--size);
+	height: var(--size);
+	border-radius: calc(var(--border) * 4);
+	transform-origin: 50% 70%;
+}
+
+.wide {
+	width: 100%;
 }
 
 .track {
+	position: relative;
 	display: flex;
+	width: 100%;
+	min-width: calc(var(--size) + var(--border) * 2);
 	background: rgba(0,0,0, .1);
 	border: 1px solid #ddd;
 	margin-bottom: 80px;
+	overflow: hidden;
 }
-.group {
+
+.train {
 	display: flex;
 }
+
+.center {
+	justify-content: center;
+	align-items: center;
+}
+
+.icon-container {
+	justify-content: space-around;
+	align-items: center;
+	position: absolute;
+	right: 0;
+	display: flex;
+	width: 40%;
+}
+
+.icon {
+	background: black;
+	height: calc(var(--size) / 4);
+	width: calc(var(--size) / 4);
+	margin: 4px;
+}
+
