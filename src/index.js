@@ -2,13 +2,16 @@ import { css, pointer, value, physics, calc, transform } from 'popmotion';
 
 const { pipe, conditional, nonlinearSpring, add, subtract, snap } = transform;
 const { getProgressFromValue } = calc;
+const logger = x => { console.log(x); return x; };
+
+const SNAP_SETTINGS = { scrollFriction: 0.4, friction: 0.8, spring: 200, boundsElasticity: 4 };
 
 // Create renderers
 export default class Gleis {
   constructor({
     events = { onUpdate: null, onSnap: null },
-    snapSettings = { scrollFriction: 0.4, friction: 0.8, spring: 200 },
-    snapToBounds = true,
+    snapSettings = SNAP_SETTINGS,
+    snap: widthSnap = true,
     sleepers = [],
     reversed = false,
     track,
@@ -22,8 +25,8 @@ export default class Gleis {
     this.currentAction = null;
     this.events = events;
     this.sleepers = sleepers;
-    this.snapSettings = snapSettings;
-    this.snapToBounds = snapToBounds;
+    this.snapSettings = Object.assign({}, SNAP_SETTINGS, snapSettings);
+    this.snap = widthSnap;
     this.reversed = reversed;
 
     this.trainCSS = css(this.train);
@@ -36,8 +39,6 @@ export default class Gleis {
     });
 
     this.bounds = bounds || this.calcBounds();
-
-    this.BOUNDS_ELASTICITY = 4;
 
     this.isOffLeft = x => x >= this.bounds[0];
     this.isOffRight = x => x <= this.bounds[1];
@@ -89,17 +90,17 @@ export default class Gleis {
         // Select the `x` pointer value
         ({ x }) => x,
         // Subtract the pointer origin to get the pointer offset
-        subtract(pointerX),
         // Apply the offset to the slider's origin offset
         add(this.getOffset()),
-        // Apply a spring if the slider is out of bounds
+        subtract(pointerX),
+        // Apply a spring if the slider is out of bounds.
         conditional(
           v => v > this.bounds[0],
-          nonlinearSpring(this.BOUNDS_ELASTICITY, this.bounds[0]),
+          nonlinearSpring(this.snapSettings.boundsElasticity, this.bounds[0]),
         ),
         conditional(
           v => v < this.bounds[1],
-          nonlinearSpring(this.BOUNDS_ELASTICITY, this.bounds[1]),
+          nonlinearSpring(this.snapSettings.boundsElasticity, this.bounds[1]),
         ),
         // Use the calculated value to set the offset
 
@@ -115,14 +116,14 @@ export default class Gleis {
 
     const offset = this.getOffset();
     const snapTo = (x) => {
-      if (!this.snapToBounds) {
+      if (!this.snap) {
         if (this.isOffLeft(x)) return this.bounds[0];
         if (this.isOffRight(x)) return this.bounds[1];
 
         return x;
       }
 
-      const bounds = this.snapToBounds ? this.bounds : [];
+      const bounds = this.snap ? this.bounds : [];
       const snapPoints = [...bounds, ...this.sleepers].sort((a, b) => a > b);
 
       const point = snap(snapPoints)(x);
@@ -156,7 +157,8 @@ export default class Gleis {
               x =>
                 this.isOffLeft(x) ||
                 this.isOffRight(x) ||
-                Math.abs(this.currentOffset.getVelocity()) < 200,
+                // Only snap with this spring when snap is activated and velocity is slow.
+                (this.snap && Math.abs(this.currentOffset.getVelocity()) < 200),
               x =>
                 this.startAction(
                   physics({
