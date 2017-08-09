@@ -1,8 +1,15 @@
 import { css, pointer, value, physics, calc, transform } from 'popmotion';
 
-const { pipe, conditional, nonlinearSpring, add, subtract, snap } = transform;
+const { pipe, conditional, interpolate, nonlinearSpring, add, subtract, snap } = transform;
 const { getProgressFromValue } = calc;
-const logger = x => { console.log(x); return x; };
+const logger = (x) => {
+  console.log(x);
+  return x;
+};
+const sort = x => [...x].sort((a, b) => a > b);
+const sortDesc = x => [...x].sort((a, b) => a < b);
+const objectToBoundsKeys = (sleepers = {}, bounds = [0, 1]) =>
+  Object.keys(sleepers).map(pipe(x => parseInt(x, 10), interpolate([0, 100], bounds)));
 
 const SNAP_SETTINGS = { scrollFriction: 0.4, friction: 0.8, spring: 200, boundsElasticity: 4 };
 
@@ -24,7 +31,7 @@ export default class Gleis {
 
     this.currentAction = null;
     this.events = events;
-    this.sleepers = sleepers;
+
     this.snapSettings = Object.assign({}, SNAP_SETTINGS, snapSettings);
     this.snap = widthSnap;
     this.reversed = reversed;
@@ -38,7 +45,12 @@ export default class Gleis {
       this.trainCSS.set('x', x);
     });
 
-    this.bounds = bounds || this.calcBounds();
+    this.bounds = sortDesc(bounds || this.calcBounds());
+    this.sleepers = sleepers || [];
+    this.sleepersArray = Array.isArray(sleepers)
+      ? sleepers
+      : objectToBoundsKeys(this.sleepers, this.bounds);
+    console.log('this.sleepersArray: ', this.sleepersArray);
 
     this.isOffLeft = x => x >= this.bounds[0];
     this.isOffRight = x => x <= this.bounds[1];
@@ -63,11 +75,11 @@ export default class Gleis {
   }
 
   calcBounds() {
-    if (this.reversed) {
-      this.bounds = [0, this.track.clientWidth - this.train.clientWidth];
-    } else {
-      this.bounds = [0, this.track.clientWidth];
-    }
+    const trainSize = this.train.clientWidth;
+    const trackSize = this.track.clientWidth;
+
+    this.bounds = [0, trainSize > trackSize ? trackSize - trainSize : 0];
+
     console.log('this.bounds: ', this.bounds);
 
     return this.bounds;
@@ -124,7 +136,7 @@ export default class Gleis {
       }
 
       const bounds = this.snap ? this.bounds : [];
-      const snapPoints = [...bounds, ...this.sleepers].sort((a, b) => a > b);
+      const snapPoints = sort([...bounds, ...this.sleepersArray]);
 
       const point = snap(snapPoints)(x);
 
