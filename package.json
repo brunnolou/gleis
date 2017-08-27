@@ -5,6 +5,7 @@
   "main": "lib/index.js",
   "scripts": {
     "start": "neutrino start",
+    "build:demo": "neutrino build",
     "build": "babel src | uglifyjs -b -o lib/index.js && uglifyjs lib/index.js -m -c -o lib/index.min.js",
     "test": "jest"
   },
@@ -18,9 +19,10 @@
   "author": "Bruno Lourenco",
   "license": "MIT",
   "dependencies": {
+    "keyframe": "^2.0.0",
+    "lodash.range": "^3.2.0",
     "popmotion": "^7.5.6",
-    "raf": "^3.3.2",
-    "springs": "^1.0.2"
+    "raf": "^3.3.2"
   },
   "devDependencies": {
     "babel-cli": "^6.24.1",
