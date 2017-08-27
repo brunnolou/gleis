@@ -1,15 +1,12 @@
 import { css, pointer, value, physics, calc, transform } from 'popmotion';
+import keyframe from 'keyframe';
+import range from 'lodash.range';
 
 const { pipe, conditional, interpolate, nonlinearSpring, add, subtract, snap } = transform;
 const { getProgressFromValue } = calc;
-const logger = (x) => {
-  console.log(x);
-  return x;
-};
-const sort = x => [...x].sort((a, b) => a > b);
-const sortDesc = x => [...x].sort((a, b) => a < b);
-const objectToBoundsKeys = (sleepers = {}, bounds = [0, 1]) =>
-  Object.keys(sleepers).map(pipe(x => parseInt(x, 10), interpolate([0, 100], bounds)));
+const logger = x => x;
+const sort = x => [...x].sort((a, b) => a - b);
+const sortDesc = x => [...x].sort((a, b) => b - a);
 
 const SNAP_SETTINGS = { scrollFriction: 0.4, friction: 0.8, spring: 200, boundsElasticity: 4 };
 
@@ -21,6 +18,8 @@ export default class Gleis {
     snap: widthSnap = true,
     sleepers = [],
     reversed = false,
+    setStyles = true,
+    minVelocity = 200,
     track,
     train,
     bounds,
@@ -28,6 +27,8 @@ export default class Gleis {
     // DOM elements.
     this.track = track;
     this.train = train;
+    this.setStyles = setStyles;
+    this.minVelocity = minVelocity;
 
     this.currentAction = null;
     this.events = events;
@@ -35,25 +36,27 @@ export default class Gleis {
     this.snapSettings = Object.assign({}, SNAP_SETTINGS, snapSettings);
     this.snap = widthSnap;
     this.reversed = reversed;
+    this.sleeperIndex = 0;
 
     this.trainCSS = css(this.train);
     this.setOffset = x => this.currentOffset.set(x);
     this.getOffset = x => this.currentOffset.get(x);
     this.currentOffset = value(0, (x) => {
       if (typeof x !== 'number') return;
+      if (this.setStyles) {
+        this.trainCSS.set('x', x);
+      }
       this.onUpdate(x);
-      this.trainCSS.set('x', x);
     });
 
     this.bounds = sortDesc(bounds || this.calcBounds());
     this.sleepers = sleepers || [];
-    this.sleepersArray = Array.isArray(sleepers)
-      ? sleepers
-      : objectToBoundsKeys(this.sleepers, this.bounds);
-    console.log('this.sleepersArray: ', this.sleepersArray);
+    this.sleepersArray = Array.isArray(sleepers) ? sleepers : this.generateSleepers(sleepers);
 
     this.isOffLeft = x => x >= this.bounds[0];
     this.isOffRight = x => x <= this.bounds[1];
+
+    this.currentOffset.set(0);
 
     this.track.addEventListener('mousedown', this.startDragging.bind(this), false);
     this.track.addEventListener('touchstart', this.startDragging.bind(this), false);
@@ -66,6 +69,10 @@ export default class Gleis {
   onUpdate(x) {
     this.progress = getProgressFromValue(...[...this.bounds, x]);
 
+    if (this.sleepersObject && this.progress >= 0 && this.progress <= 1) {
+      keyframe(this.sleepersObject, this.progress);
+    }
+
     if (!this.events.onUpdate) return x;
 
     // set progress between 0 and 1;
@@ -74,13 +81,23 @@ export default class Gleis {
     return x;
   }
 
+  getBoundsWidth() {
+    return this.bounds[0] + this.bounds[1];
+  }
+
+  generateSleepers(sleepersNumber = 0) {
+    const width = this.getBoundsWidth() / sleepersNumber;
+    console.log('this.bounds: ', this.bounds);
+    console.log('width: ', width);
+
+    return range(sleepersNumber).map((x, i) => width * i);
+  }
+
   calcBounds() {
     const trainSize = this.train.clientWidth;
     const trackSize = this.track.clientWidth;
 
     this.bounds = [0, trainSize > trackSize ? trackSize - trainSize : 0];
-
-    console.log('this.bounds: ', this.bounds);
 
     return this.bounds;
   }
@@ -121,36 +138,71 @@ export default class Gleis {
     });
   }
 
+  goTo(index) {
+    const { friction, spring } = this.snapSettings;
+
+    this.startAction(
+      physics({
+        from: this.getOffset(),
+        to: this.snapTo(this.sleepersArray[index]),
+        spring,
+        friction,
+        velocity: this.currentOffset.getVelocity(),
+        onUpdate: pipe(this.setOffset),
+      }),
+    );
+  }
+
+  previous() {
+    if (this.sleeperIndex <= 0) return;
+
+    this.sleeperIndex = this.sleeperIndex - 1;
+
+    this.goTo(this.sleeperIndex);
+  }
+
+  next() {
+    if (this.sleeperIndex + 1 >= this.sleepersArray.length) return;
+
+    this.sleeperIndex = this.sleeperIndex + 1;
+
+    this.goTo(this.sleeperIndex);
+  }
+
+  snapTo(x) {
+    if (!this.snap) {
+      if (this.isOffLeft(x)) return this.bounds[0];
+      if (this.isOffRight(x)) return this.bounds[1];
+
+      return x;
+    }
+
+    const bounds = this.snap ? this.bounds : [];
+
+    const snapPoints = sort([...bounds, ...this.sleepersArray]);
+
+    const point = snap(snapPoints)(x);
+
+    this.sleeperIndex = this.sleepersArray.indexOf(point);
+
+    if (this.events.onSnap) this.events.onSnap(this.sleeperIndex, point);
+
+    return point;
+  }
+
   startScrolling(e) {
     e.preventDefault();
 
     const { scrollFriction, friction, spring } = this.snapSettings;
 
     const offset = this.getOffset();
-    const snapTo = (x) => {
-      if (!this.snap) {
-        if (this.isOffLeft(x)) return this.bounds[0];
-        if (this.isOffRight(x)) return this.bounds[1];
-
-        return x;
-      }
-
-      const bounds = this.snap ? this.bounds : [];
-      const snapPoints = sort([...bounds, ...this.sleepersArray]);
-
-      const point = snap(snapPoints)(x);
-
-      if (this.events.onSnap) this.events.onSnap(point);
-
-      return point;
-    };
 
     // If out of bounds, snap to the edges.
     if (this.isOffLeft(offset) || this.isOffRight(offset)) {
       this.startAction(
         physics({
           from: this.getOffset(),
-          to: snapTo(this.getOffset()),
+          to: this.snapTo(this.getOffset()),
           spring,
           friction,
           velocity: this.currentOffset.getVelocity(),
@@ -170,12 +222,12 @@ export default class Gleis {
                 this.isOffLeft(x) ||
                 this.isOffRight(x) ||
                 // Only snap with this spring when snap is activated and velocity is slow.
-                (this.snap && Math.abs(this.currentOffset.getVelocity()) < 200),
+                (this.snap && Math.abs(this.currentOffset.getVelocity() / 2) < spring),
               x =>
                 this.startAction(
                   physics({
                     from: this.getOffset(),
-                    to: snapTo(x),
+                    to: this.snapTo(x),
                     spring,
                     friction,
                     velocity: this.currentOffset.getVelocity(),

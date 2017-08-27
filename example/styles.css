@@ -2,6 +2,7 @@
 	margin: 30px;
 	--size: 200px;
 	--border: 4px;
+	font-family: sans-serif;
 }
 
 * {
