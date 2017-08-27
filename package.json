@@ -1,6 +1,6 @@
 {
   "name": "gleis",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Gleis – physics for dragging UI animation",
   "main": "lib/index.js",
   "scripts": {
