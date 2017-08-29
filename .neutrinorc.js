@@ -3,6 +3,6 @@ module.exports = {
     'neutrino-preset-web',
   ],
   options: {
-    source: 'example',
+    source: 'examples',
   }
 };

@@ -10,16 +10,16 @@ const div = document.createElement('div');
 div.innerHTML = template;
 root.appendChild(div);
 
-const boxes = [...root.querySelectorAll('.box')].map(x => css(x));
+const cars = [...root.querySelectorAll('.car')].map(x => css(x));
 
 const rotate = interpolate([0, 1], [0, -360]);
 
 const train = root.querySelector('#trainKeyframes');
 const track = root.querySelector('#trackKeyframes');
 
-boxes.forEach((box, i) =>
-  box.set({
-    rotateY: i * 360 / boxes.length,
+cars.forEach((car, i) =>
+  car.set({
+    rotateY: i * 360 / cars.length,
     translateZ: 200,
   }),
 );

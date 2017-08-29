@@ -6,7 +6,7 @@
 }
 
 * {
-	box-sizing: border-box;
+	car-sizing: border-car;
 }
 
 #root {
@@ -17,7 +17,7 @@
 	overflow: hidden;
 }
 
-.box {
+.car {
 	text-align: center;
 	background: #eee;
 	border: 1px solid #ddd;
@@ -35,7 +35,7 @@
 	min-width: calc(var(--size) + var(--border) * 2);
 	background: rgba(0,0,0, .1);
 	border: 1px solid #ddd;
-	margin-bottom: 80px;
+	margin: 0 auto 80px;
 	overflow: hidden;
 }
 

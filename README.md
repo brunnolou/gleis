@@ -9,10 +9,31 @@
 `npm install gleis`
 
 ## Usage
+```html
+<div class="track">
+  <div class="train">
+    <div class="car">0</div>
+    <div class="car">1</div>
+    <div class="car">2</div>
+    <div class="car">3</div>
+  </div>
+</div>
+```
 
 ```js
-new Gleis(options);
+import Gleis from 'gleis';
+
+new Gleis({
+  track: document.querySelector('.track'),
+  train: document.querySelector('.train'),
+  sleepers: [-200, —400, -600]
+});
+
 ```
+See the <a href="https://brunnolou.github.io/gleis/">Demos</a>.
+
+To see more code implementations check the
+<a href="https://github.com/brunnolou/gleis/tree/master/examples" target="_blank">examples folder</a>.
 
 ## Demo
 
@@ -20,4 +41,4 @@ new Gleis(options);
 
 `npm start`
 
-`./example/` folder will be running on: `http://localhost:5000`
+`./examples/` folder will be running on: `http://localhost:5000`
