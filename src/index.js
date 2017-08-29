@@ -2,7 +2,7 @@ import { css, pointer, value, physics, calc, transform } from 'popmotion';
 import keyframe from 'keyframe';
 import range from 'lodash.range';
 
-const { pipe, conditional, interpolate, nonlinearSpring, add, subtract, snap } = transform;
+const { pipe, conditional, nonlinearSpring, add, subtract, snap: snapFn } = transform;
 const { getProgressFromValue } = calc;
 const logger = x => x;
 const sort = x => [...x].sort((a, b) => a - b);
@@ -15,10 +15,10 @@ export default class Gleis {
   constructor({
     events = { onUpdate: null, onSnap: null },
     snapSettings = SNAP_SETTINGS,
-    snap: widthSnap = true,
-    sleepers = [],
-    reversed = false,
+    snap,
+    sleepers,
     setStyles = true,
+    reversed = true,
     minVelocity = 200,
     track,
     train,
@@ -28,14 +28,14 @@ export default class Gleis {
     this.track = track;
     this.train = train;
     this.setStyles = setStyles;
+    this.reversed = reversed;
     this.minVelocity = minVelocity;
 
     this.currentAction = null;
     this.events = events;
 
     this.snapSettings = Object.assign({}, SNAP_SETTINGS, snapSettings);
-    this.snap = widthSnap;
-    this.reversed = reversed;
+    this.snap = snap === undefined && sleepers ? true : snap;
     this.sleeperIndex = 0;
 
     this.trainCSS = css(this.train);
@@ -50,18 +50,22 @@ export default class Gleis {
     });
 
     this.bounds = sortDesc(bounds || this.calcBounds());
-    this.sleepers = sleepers || [];
+    this.sleepers = sleepers;
     this.sleepersArray = Array.isArray(sleepers) ? sleepers : this.generateSleepers(sleepers);
+
+    if (this.reversed) {
+      this.sleepersArray = this.sleepersArray.map(sleeper => sleeper * -1);
+    }
 
     this.isOffLeft = x => x >= this.bounds[0];
     this.isOffRight = x => x <= this.bounds[1];
 
     this.currentOffset.set(0);
 
-    this.track.addEventListener('mousedown', this.startDragging.bind(this), false);
-    this.track.addEventListener('touchstart', this.startDragging.bind(this), false);
-    window.addEventListener('mouseup', this.startScrolling.bind(this), false);
-    window.addEventListener('touchend', this.startScrolling.bind(this), false);
+    this.startDragging = this.startDragging.bind(this);
+    this.startScrolling = this.startScrolling.bind(this);
+    this.track.addEventListener('mousedown', this.startDragging, false);
+    this.track.addEventListener('touchstart', this.startDragging, false);
 
     // window.addEventListener('resize', this.calcBounds.bind(this));
   }
@@ -87,10 +91,8 @@ export default class Gleis {
 
   generateSleepers(sleepersNumber = 0) {
     const width = this.getBoundsWidth() / sleepersNumber;
-    console.log('this.bounds: ', this.bounds);
-    console.log('width: ', width);
 
-    return range(sleepersNumber).map((x, i) => width * i);
+    return range(sleepersNumber).map((x, i) => width * -i);
   }
 
   calcBounds() {
@@ -131,11 +133,13 @@ export default class Gleis {
           v => v < this.bounds[1],
           nonlinearSpring(this.snapSettings.boundsElasticity, this.bounds[1]),
         ),
-        // Use the calculated value to set the offset
-
+        // Use the calculated value to set the offset.
         this.setOffset,
       ),
     });
+
+    window.addEventListener('mouseup', this.startScrolling, false);
+    window.addEventListener('touchend', this.startScrolling, false);
   }
 
   goTo(index) {
@@ -181,7 +185,7 @@ export default class Gleis {
 
     const snapPoints = sort([...bounds, ...this.sleepersArray]);
 
-    const point = snap(snapPoints)(x);
+    const point = snapFn(snapPoints)(x);
 
     this.sleeperIndex = this.sleepersArray.indexOf(point);
 
@@ -192,6 +196,9 @@ export default class Gleis {
 
   startScrolling(e) {
     e.preventDefault();
+
+    window.removeEventListener('mouseup', this.startScrolling, false);
+    window.removeEventListener('touchend', this.startScrolling, false);
 
     const { scrollFriction, friction, spring } = this.snapSettings;
 
@@ -240,18 +247,6 @@ export default class Gleis {
         }),
       );
     }
-  }
-
-  setSleepers(sleepers) {
-    const result = [this.start, ...sleepers, this.end];
-
-    if (this.reversed) {
-      return result.map(sleeper => sleeper * -1);
-    }
-
-    result[result.length - 1] = this.end - this.getElementSize([this.draggedElement])[0];
-
-    return result;
   }
 
   getElementSize(elements = []) {
